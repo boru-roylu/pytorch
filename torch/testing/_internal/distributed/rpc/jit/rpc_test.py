@@ -4,7 +4,7 @@ from typing import Dict, Tuple
 import torch
 import torch.distributed.rpc as rpc
 from torch import Tensor
-from torch.testing._internal.dist_utils import dist_init
+from torch.testing._internal.dist_utils import dist_init, worker_name
 from torch.testing._internal.distributed.rpc.rpc_agent_test_fixture import (
     RpcAgentTestFixture,
 )
@@ -541,7 +541,7 @@ def rref_script_annotation(rref_var):
 class JitRpcTest(LocalRRefTest, JitRpcAsyncOpTest, RpcAgentTestFixture):
     @dist_init
     def test_torchscript_function(self):
-        dst_worker_name = "worker{}".format((self.rank + 1) % self.world_size)
+        dst_worker_name = worker_name((self.rank + 1) % self.world_size)
         local_ret = one_arg(torch.ones(2, 2))
         ret = rpc.rpc_sync(dst_worker_name, one_arg, args=(torch.ones(2, 2),))
         self.assertEqual(ret, local_ret)
@@ -549,13 +549,13 @@ class JitRpcTest(LocalRRefTest, JitRpcAsyncOpTest, RpcAgentTestFixture):
         self.assertEqual(rref.to_here(), local_ret)
         # create rref to itself
         local_rref = rpc.remote(
-            "worker{}".format(self.rank), one_arg, args=(torch.ones(2, 2),)
+            worker_name(self.rank), one_arg, args=(torch.ones(2, 2),)
         )
         self.assertEqual(local_rref.to_here(), local_ret)
 
     @dist_init
     def test_torchscript_function_exception(self):
-        dst_worker_name = "worker{}".format((self.rank + 1) % self.world_size)
+        dst_worker_name = worker_name((self.rank + 1) % self.world_size)
         with self.assertRaisesRegex(RuntimeError, r"one_arg\(\) expected at most"):
             ret = rpc.rpc_sync(dst_worker_name, one_arg, args=(10, 20))
 
@@ -568,25 +568,59 @@ class JitRpcTest(LocalRRefTest, JitRpcAsyncOpTest, RpcAgentTestFixture):
 
         # rpc_sync still accepts script class and run it in
         # the same code path as python call.
+<<<<<<< dest:   1586723a7ec3 - flato: [carbon] encrypt password in Unity in c...
         ret = rpc.rpc_sync(
             dst_worker_name, MyScriptClass, args=(self.rank,)
         )
+=======
+        # Currently neither rpc_sync or _rpc_sync_torchscript is allowed to
+        # accept script module and script module method.
+        n = self.rank + 1
+        dst_rank = n % self.world_size
+        with self.assertRaisesRegex(
+            RuntimeError, "attempted to get undefined function"
+        ):
+            ret = rpc._rpc_sync_torchscript(
+                worker_name(dst_rank), MyScriptClass, args=()
+            )
+        ret = rpc.rpc_sync(worker_name(dst_rank), MyScriptClass, args=())
+>>>>>>> source: f69d834928a1 refactor - pritam: Add worker_name helper to dis...
 
         # rpc_sync does not accept script module and script module method.
         with self.assertRaisesRegex(
             RuntimeError, "ScriptModules cannot be deepcopied"
         ):
+<<<<<<< dest:   1586723a7ec3 - flato: [carbon] encrypt password in Unity in c...
             ret = rpc.rpc_sync(
                 dst_worker_name, MyScriptModule, args=(self.rank,)
+=======
+            ret = rpc._rpc_sync_torchscript(
+                worker_name(dst_rank), MyScriptModule, args=(self.rank,)
+>>>>>>> source: f69d834928a1 refactor - pritam: Add worker_name helper to dis...
             )
 
+<<<<<<< dest:   1586723a7ec3 - flato: [carbon] encrypt password in Unity in c...
+=======
+        with self.assertRaisesRegex(
+            RuntimeError, "attempted to get undefined function"
+        ):
+            ret = rpc._rpc_sync_torchscript(
+                worker_name(dst_rank), MyScriptModule(self.rank).forward, args=()
+            )
+>>>>>>> source: f69d834928a1 refactor - pritam: Add worker_name helper to dis...
         # Python 3.5 and Python 3.6 throw different error message, the only
         # common word can be greped is "pickle".
+<<<<<<< dest:   1586723a7ec3 - flato: [carbon] encrypt password in Unity in c...
         with self.assertRaisesRegex(
             TypeError, "pickle"
         ):
             ret = rpc.rpc_async(
                 dst_worker_name, MyScriptModule(self.rank).forward, args=()
+=======
+        with self.assertRaisesRegex(Exception, "pickle"):
+            ret = rpc.rpc_sync(
+                worker_name(dst_rank), MyScriptModule(self.rank).forward, args=()
+>>>>>>> source: f69d834928a1 refactor - pritam: Add worker_name helper to dis...
             )
 
     @dist_init
@@ -597,23 +631,23 @@ class JitRpcTest(LocalRRefTest, JitRpcAsyncOpTest, RpcAgentTestFixture):
 
         # create rref on current rank
         rref = rpc.remote(
-            "worker{}".format(self.rank), one_arg, args=(torch.ones(2, 2),)
+            worker_name(self.rank), one_arg, args=(torch.ones(2, 2),)
         )
 
         # pass rref to another user in rpc call
-        ret = rpc.rpc_sync("worker{}".format(dst_rank), rref_to_here, args=(rref,))
+        ret = rpc.rpc_sync(worker_name(dst_rank), rref_to_here, args=(rref,))
         self.assertEqual(ret, local_ret)
 
         # return rref in rpc call
-        rref1 = rpc.rpc_sync("worker{}".format(dst_rank), return_rref, args=(rref,))
+        rref1 = rpc.rpc_sync(worker_name(dst_rank), return_rref, args=(rref,))
         self.assertEqual(rref1.to_here(), local_ret)
 
         # pass rref to another user in remote call
-        rref2 = rpc.remote("worker{}".format(dst_rank), rref_to_here, args=(rref,))
+        rref2 = rpc.remote(worker_name(dst_rank), rref_to_here, args=(rref,))
         self.assertEqual(rref2.to_here(), local_ret)
 
         # return rref in remote call
-        rref3 = rpc.remote("worker{}".format(dst_rank), return_rref, args=(rref,))
+        rref3 = rpc.remote(worker_name(dst_rank), return_rref, args=(rref,))
         self.assertEqual(rref3.to_here().to_here(), local_ret)
 
     @dist_init
@@ -631,12 +665,12 @@ class JitRpcTest(LocalRRefTest, JitRpcAsyncOpTest, RpcAgentTestFixture):
         n = self.rank + 1
         dst_rank = n % self.world_size
         remote_ref = rpc.remote(
-            "worker{}".format(dst_rank), construct_my_script_module, args=(self.rank,)
+            worker_name(dst_rank), construct_my_script_module, args=(self.rank,)
         )
 
         # pass rref arg to owner
         ret = rpc.rpc_sync(
-            "worker{}".format(dst_rank),
+            worker_name(dst_rank),
             run_ref_script_module,
             args=(remote_ref, torch.ones(self.rank)),
         )
@@ -646,7 +680,7 @@ class JitRpcTest(LocalRRefTest, JitRpcAsyncOpTest, RpcAgentTestFixture):
     def test_rref_is_owner(self):
         n = self.rank + 1
         dst_rank = n % self.world_size
-        rref_var = rpc_return_rref("worker{}".format(dst_rank))
+        rref_var = rpc_return_rref(worker_name(dst_rank))
 
         @torch.jit.script
         def rref_tensor_is_owner(rref_var):
@@ -661,7 +695,7 @@ class JitRpcTest(LocalRRefTest, JitRpcAsyncOpTest, RpcAgentTestFixture):
         n = self.rank + 1
         dst_rank = n % self.world_size
 
-        module_with_rrefs = MyScriptModuleWithRRefs("worker{}".format(dst_rank))
+        module_with_rrefs = MyScriptModuleWithRRefs(worker_name(dst_rank))
         res = module_with_rrefs()
         self.assertEqual(res, torch.ones(2, 2) * 9)
 
@@ -669,7 +703,7 @@ class JitRpcTest(LocalRRefTest, JitRpcAsyncOpTest, RpcAgentTestFixture):
     def test_rref_python_annotation(self):
         n = self.rank + 1
         dst_rank = n % self.world_size
-        rref_var = rpc_return_rref("worker{}".format(dst_rank))
+        rref_var = rpc_return_rref(worker_name(dst_rank))
 
         res = rref_script_annotation(rref_var)
         self.assertEqual(res, torch.ones(2, 2) + 1)
